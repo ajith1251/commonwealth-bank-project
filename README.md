@@ -1,5 +1,7 @@
 # 🎯 CommBank Goal Tracker
 
+[![CI](https://github.com/ajith1251/commonwealth-bank-project/actions/workflows/ci.yml/badge.svg)](https://github.com/ajith1251/commonwealth-bank-project/actions/workflows/ci.yml)
+
 A full-stack financial goal tracking application that lets users create, manage, and track progress toward their financial goals with custom emoji icons.
 
 > **Portfolio Project** — Built on an existing onboarding codelab curriculum from CommBank. Original instructional materials authored by Tag Ramotar. Application code independently implemented with significant UI/UX, engineering, and feature improvements.
