@@ -1,7 +1,18 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import styled, { keyframes } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMoon, faSun, faSearch, faBullseye, faWallet, faChartLine, faFlagCheckered, faPlus, faRedo } from '@fortawesome/free-solid-svg-icons'
+import {
+  faMoon,
+  faSun,
+  faSearch,
+  faBullseye,
+  faWallet,
+  faChartLine,
+  faFlagCheckered,
+  faPlus,
+  faRedo,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import {
   fetchGoals,
@@ -14,13 +25,16 @@ import { toggleMode, selectMode } from './store/themeSlice'
 import type { ThemeMode } from './store/themeSlice'
 import GoalCard from './components/GoalCard'
 import GoalManager from './components/GoalManager'
+import GoalDetail from './components/GoalDetail'
+import DashboardChart from './components/DashboardChart'
+import { StatSkeleton, GoalCardSkeleton } from './components/Skeleton'
 import { colors, spacing, typography, shadows, radii, breakpoints, transitions, zIndex } from './theme'
 import type { Goal } from './types'
 
 // ── Animations ────────────────────────────────────────────────────────
 
 const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
 `
 
@@ -29,28 +43,26 @@ const slideInRight = keyframes`
   to   { transform: translateX(0); opacity: 1; }
 `
 
-const pulse = keyframes`
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-`
-
 // ── Styled Components ─────────────────────────────────────────────────
 
-const AppContainer = styled.div<{ mode: ThemeMode }>`
+const AppContainer = styled.div<{ $mode: ThemeMode }>`
   min-height: 100vh;
-  background: ${(p) => (p.mode === 'dark' ? '#0f172a' : colors.gray[50])};
-  color: ${(p) => (p.mode === 'dark' ? '#e2e8f0' : colors.gray[800])};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.bg : colors.light.bg)};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.light.text)};
   display: flex;
   flex-direction: column;
   transition: background ${transitions.normal};
 `
 
-// ── Header / Nav ──────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────────────
 
-const Header = styled.header`
-  background: linear-gradient(135deg, ${colors.primary[600]} 0%, ${colors.primary[800]} 100%);
+const Header = styled.header<{ $mode: ThemeMode }>`
+  background: ${(p) =>
+    p.$mode === 'dark'
+      ? `linear-gradient(135deg, #1e293b 0%, #0f172a 100%)`
+      : `linear-gradient(135deg, ${colors.primary[700]} 0%, ${colors.primary[900]} 100%)`};
   color: ${colors.white};
-  padding: ${spacing[2]} ${spacing[1.5]};
+  padding: ${spacing[1.5]} ${spacing[1.5]} ${spacing[1.25]};
   position: relative;
   overflow: hidden;
 
@@ -58,13 +70,16 @@ const Header = styled.header`
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.06) 0%, transparent 60%);
+    background: ${(p) =>
+      p.$mode === 'dark'
+        ? 'radial-gradient(circle at 30% 50%, rgba(59,130,246,0.08) 0%, transparent 60%)'
+        : 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 60%)'};
     pointer-events: none;
   }
 `
 
 const HeaderInner = styled.div`
-  max-width: 1024px;
+  max-width: 1100px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -75,7 +90,7 @@ const HeaderInner = styled.div`
 const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
-  gap: ${spacing[0.75]};
+  gap: ${spacing[1]};
 `
 
 const HeaderRight = styled.div`
@@ -97,9 +112,9 @@ const TitleGroup = styled.div`
   }
 
   p {
-    margin: ${spacing[0.25]} 0 0;
+    margin: 2px 0 0;
     font-size: ${typography.sizes.sm};
-    opacity: 0.8;
+    opacity: 0.75;
 
     @media (min-width: ${breakpoints.md}) {
       font-size: ${typography.sizes.base};
@@ -107,9 +122,9 @@ const TitleGroup = styled.div`
   }
 `
 
-const IconButton = styled.button`
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+const IconButton = styled.button<{ $mode: ThemeMode }>`
+  background: ${(p) => (p.$mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)')};
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.2)')};
   color: ${colors.white};
   width: 38px;
   height: 38px;
@@ -121,7 +136,7 @@ const IconButton = styled.button`
   transition: background ${transitions.fast};
 
   &:hover {
-    background: rgba(255, 255, 255, 0.22);
+    background: ${(p) => (p.$mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.25)')};
   }
 
   &:focus-visible {
@@ -130,10 +145,10 @@ const IconButton = styled.button`
   }
 `
 
-// ── Dashboard Stats ───────────────────────────────────────────────────
+// ── Dashboard Section ─────────────────────────────────────────────────
 
-const Dashboard = styled.div`
-  max-width: 1024px;
+const DashboardSection = styled.div`
+  max-width: 1100px;
   width: 100%;
   margin: 0 auto;
   padding: ${spacing[1.5]} ${spacing[1.5]} 0;
@@ -143,28 +158,37 @@ const Dashboard = styled.div`
   }
 `
 
+const DashboardGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: ${spacing[1]};
+  animation: ${fadeIn} 0.35s ease;
+
+  @media (min-width: ${breakpoints.md}) {
+    grid-template-columns: 1fr 1fr;
+  }
+`
+
 const StatsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: ${spacing[0.75]};
-  animation: ${fadeIn} 0.3s ease;
 
   @media (min-width: ${breakpoints.md}) {
-    grid-template-columns: repeat(4, 1fr);
     gap: ${spacing[1]};
   }
 `
 
-const StatCard = styled.div<{ mode: ThemeMode }>`
-  background: ${(p) => (p.mode === 'dark' ? '#1e293b' : colors.white)};
-  border: 1px solid ${(p) => (p.mode === 'dark' ? '#334155' : colors.gray[200])};
+const StatCard = styled.div<{ $mode: ThemeMode }>`
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surface : colors.white)};
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? colors.dark.border : colors.gray[200])};
   border-radius: ${radii.lg};
   padding: ${spacing[0.75]} ${spacing[1]};
   transition: box-shadow ${transitions.fast}, border-color ${transitions.fast};
 
   &:hover {
-    box-shadow: ${shadows.md};
-    border-color: ${colors.primary[200]};
+    box-shadow: ${(p) => (p.$mode === 'dark' ? shadows.dark.md : shadows.md)};
+    border-color: ${(p) => (p.$mode === 'dark' ? colors.dark.borderLight : colors.primary[200])};
   }
 `
 
@@ -175,24 +199,22 @@ const StatHeader = styled.div`
   margin-bottom: ${spacing[0.25]};
 `
 
-const StatIcon = styled.span<{ color: string }>`
-  color: ${(p) => p.color};
+const StatIcon = styled.span<{ $color: string }>`
+  color: ${(p) => p.$color};
   font-size: ${typography.sizes.sm};
   display: flex;
 `
 
-const StatLabel = styled.span<{ mode: ThemeMode }>`
+const StatLabelText = styled.span<{ $mode: ThemeMode }>`
   font-size: ${typography.sizes.xs};
   font-weight: ${typography.weights.medium};
-  color: ${(p) => (p.mode === 'dark' ? '#94a3b8' : colors.gray[500])};
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
 `
 
-const StatValue = styled.div<{ mode: ThemeMode }>`
+const StatValue = styled.div<{ $mode: ThemeMode }>`
   font-size: ${typography.sizes.xl};
   font-weight: ${typography.weights.bold};
-  color: ${(p) => (p.mode === 'dark' ? '#f1f5f9' : colors.gray[800])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[800])};
   line-height: 1.2;
 
   @media (min-width: ${breakpoints.md}) {
@@ -200,83 +222,105 @@ const StatValue = styled.div<{ mode: ThemeMode }>`
   }
 `
 
-const StatSub = styled.span<{ mode: ThemeMode }>`
+const StatSub = styled.span<{ $mode: ThemeMode }>`
   font-size: ${typography.sizes.xs};
   font-weight: ${typography.weights.normal};
-  color: ${(p) => (p.mode === 'dark' ? '#64748b' : colors.gray[400])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
 `
 
-// ── Search / Toolbar ──────────────────────────────────────────────────
+// ── Toolbar ───────────────────────────────────────────────────────────
 
 const Toolbar = styled.div`
-  max-width: 1024px;
+  max-width: 1100px;
   width: 100%;
   margin: 0 auto;
   padding: ${spacing[1]} ${spacing[1.5]};
   display: flex;
   align-items: center;
   gap: ${spacing[0.75]};
-  animation: ${fadeIn} 0.3s ease;
+  animation: ${fadeIn} 0.35s ease;
+  flex-wrap: wrap;
 
   @media (min-width: ${breakpoints.md}) {
-    padding: ${spacing[1]} ${spacing[2]};
+    padding: ${spacing[1.25]} ${spacing[2]};
+    flex-wrap: nowrap;
   }
 `
 
-const SearchInput = styled.input<{ mode: ThemeMode }>`
+const SearchWrapper = styled.div`
+  position: relative;
   flex: 1;
-  padding: ${spacing[0.5]} ${spacing[0.75]} ${spacing[0.5]} ${spacing[2]};
-  border: 1px solid ${(p) => (p.mode === 'dark' ? '#334155' : colors.gray[200])};
+  min-width: 160px;
+`
+
+const SearchInput = styled.input<{ $mode: ThemeMode }>`
+  width: 100%;
+  padding: ${spacing[0.5]} ${spacing[0.75]} ${spacing[0.5]} 2rem;
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? colors.dark.border : colors.gray[200])};
   border-radius: ${radii.md};
   font-size: ${typography.sizes.sm};
-  background: ${(p) => (p.mode === 'dark' ? '#1e293b' : colors.white)};
-  color: ${(p) => (p.mode === 'dark' ? '#e2e8f0' : colors.gray[800])};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surface : colors.white)};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[800])};
   transition: border-color ${transitions.fast}, box-shadow ${transitions.fast};
-  min-width: 0;
 
   &::placeholder {
-    color: ${(p) => (p.mode === 'dark' ? '#64748b' : colors.gray[400])};
+    color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
   }
 
   &:focus {
     outline: none;
     border-color: ${colors.primary[500]};
-    box-shadow: 0 0 0 3px ${colors.primary[100]};
+    box-shadow: 0 0 0 3px ${colors.primary[50]};
   }
 `
 
-const SearchIconWrapper = styled.div`
-  position: relative;
-  flex: 1;
-  min-width: 0;
-
-  svg {
-    position: absolute;
-    left: ${spacing[0.5]};
-    top: 50%;
-    transform: translateY(-50%);
-    color: ${colors.gray[400]};
-    font-size: ${typography.sizes.sm};
-    pointer-events: none;
-  }
+const SearchIcon = styled.div<{ $mode: ThemeMode }>`
+  position: absolute;
+  left: ${spacing[0.5]};
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+  font-size: ${typography.sizes.sm};
+  pointer-events: none;
 `
 
-const ResultCount = styled.span<{ mode: ThemeMode }>`
+const ClearSearchButton = styled.button<{ $mode: ThemeMode }>`
+  position: absolute;
+  right: ${spacing[0.5]};
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: ${typography.sizes.xs};
-  color: ${(p) => (p.mode === 'dark' ? '#64748b' : colors.gray[400])};
+
+  &:hover {
+    color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[600])};
+  }
+`
+
+const ResultCount = styled.span<{ $mode: ThemeMode }>`
+  font-size: ${typography.sizes.xs};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
   white-space: nowrap;
 `
 
-const SortSelect = styled.select<{ mode: ThemeMode }>`
-  padding: ${spacing[0.5]} ${spacing[0.75]};
-  border: 1px solid ${(p) => (p.mode === 'dark' ? '#334155' : colors.gray[200])};
+const SortSelect = styled.select<{ $mode: ThemeMode }>`
+  padding: ${spacing[0.5]} ${spacing[0.75]} ${spacing[0.5]} ${spacing[0.75]};
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? colors.dark.border : colors.gray[200])};
   border-radius: ${radii.md};
   font-size: ${typography.sizes.xs};
-  background: ${(p) => (p.mode === 'dark' ? '#1e293b' : colors.white)};
-  color: ${(p) => (p.mode === 'dark' ? '#e2e8f0' : colors.gray[700])};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surface : colors.white)};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[700])};
   cursor: pointer;
   transition: border-color ${transitions.fast};
-  min-width: 110px;
+  min-width: 120px;
+  appearance: auto;
 
   &:focus {
     outline: none;
@@ -289,7 +333,7 @@ const CreateGoalButton = styled.button`
   align-items: center;
   gap: ${spacing[0.5]};
   padding: ${spacing[0.5]} ${spacing[1]};
-  background: linear-gradient(135deg, ${colors.primary[600]}, ${colors.primary[700]});
+  background: ${colors.primary[600]};
   color: ${colors.white};
   border: none;
   border-radius: ${radii.md};
@@ -297,10 +341,11 @@ const CreateGoalButton = styled.button`
   font-weight: ${typography.weights.semibold};
   cursor: pointer;
   white-space: nowrap;
-  transition: opacity ${transitions.fast}, transform ${transitions.fast};
+  transition: background ${transitions.fast}, transform ${transitions.fast};
+  min-height: 38px;
 
   &:hover {
-    opacity: 0.9;
+    background: ${colors.primary[700]};
   }
 
   &:active {
@@ -323,10 +368,11 @@ const CreateGoalButton = styled.button`
 
 const Main = styled.main`
   flex: 1;
-  max-width: 1024px;
+  max-width: 1100px;
   width: 100%;
   margin: 0 auto;
   padding: 0 ${spacing[1.5]} ${spacing[2]};
+  animation: ${fadeIn} 0.3s ease;
 
   @media (min-width: ${breakpoints.md}) {
     padding: 0 ${spacing[2]} ${spacing[3]};
@@ -335,46 +381,34 @@ const Main = styled.main`
 
 const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: ${spacing[1.5]};
-  animation: ${fadeIn} 0.3s ease;
+  grid-template-columns: 1fr;
+  gap: ${spacing[1]};
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
 
   @media (min-width: ${breakpoints.lg}) {
-    gap: ${spacing[2]};
+    grid-template-columns: repeat(3, 1fr);
+    gap: ${spacing[1.25]};
   }
 `
 
 // ── States ────────────────────────────────────────────────────────────
 
-const StateMessage = styled.div<{ mode: ThemeMode }>`
+const StateMessage = styled.div<{ $mode: ThemeMode }>`
   text-align: center;
   padding: ${spacing[4]} ${spacing[1.5]};
   animation: ${fadeIn} 0.3s ease;
-  color: ${(p) => (p.mode === 'dark' ? '#94a3b8' : colors.gray[500])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[500])};
 `
 
-const LoadingSpinner = styled.div`
-  display: inline-block;
-  width: 36px;
-  height: 36px;
-  border: 3px solid ${colors.gray[200]};
-  border-top-color: ${colors.primary[500]};
-  border-radius: ${radii.full};
-  animation: ${pulse} 1.2s ease-in-out infinite;
-  margin-bottom: ${spacing[1]};
-`
-
-const LoadingText = styled.p`
-  font-size: ${typography.sizes.sm};
-  animation: ${pulse} 1.2s ease-in-out infinite;
-`
-
-const ErrorBox = styled.div<{ mode: ThemeMode }>`
+const ErrorBox = styled.div<{ $mode: ThemeMode }>`
   text-align: center;
   padding: ${spacing[2]} ${spacing[1.5]};
-  color: ${(p) => (p.mode === 'dark' ? '#fca5a5' : colors.error[500])};
-  background: ${(p) => (p.mode === 'dark' ? '#1e1b1b' : colors.error[50])};
-  border: 1px solid ${(p) => (p.mode === 'dark' ? '#7f1d1d' : colors.error[100])};
+  color: ${(p) => (p.$mode === 'dark' ? '#fca5a5' : colors.error[500])};
+  background: ${(p) => (p.$mode === 'dark' ? '#1e1b1b' : colors.error[50])};
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? '#7f1d1d' : colors.error[100])};
   border-radius: ${radii.lg};
   margin: ${spacing[1]} 0;
   font-size: ${typography.sizes.sm};
@@ -417,7 +451,7 @@ const EmptyText = styled.p`
   font-size: ${typography.sizes.sm};
   color: ${colors.gray[400]};
   margin: 0;
-  max-width: 320px;
+  max-width: 360px;
   margin: 0 auto;
   line-height: 1.6;
 `
@@ -435,10 +469,47 @@ const NoResultsText = styled.p`
   margin: 0 0 ${spacing[0.25]};
 `
 
-const NoResultsSub = styled.p`
+const ClearFilterBtn = styled.button<{ $mode: ThemeMode }>`
+  margin-top: ${spacing[0.75]};
+  padding: ${spacing[0.5]} ${spacing[1]};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surface : colors.white)};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textSecondary : colors.gray[600])};
+  border: 1px solid ${(p) => (p.$mode === 'dark' ? colors.dark.border : colors.gray[200])};
+  border-radius: ${radii.md};
   font-size: ${typography.sizes.sm};
-  color: ${colors.gray[400]};
-  margin: 0;
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    border-color: ${colors.primary[300]};
+    color: ${colors.primary[600]};
+  }
+`
+
+// ── Main Create/Empty Button ──────────────────────────────────────────
+
+const PrimaryActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: ${spacing[0.5]};
+  margin-top: ${spacing[1]};
+  padding: ${spacing[0.75]} ${spacing[1.5]};
+  background: ${colors.primary[600]};
+  color: ${colors.white};
+  border: none;
+  border-radius: ${radii.md};
+  font-size: ${typography.sizes.sm};
+  font-weight: ${typography.weights.semibold};
+  cursor: pointer;
+  transition: background ${transitions.fast}, transform ${transitions.fast};
+
+  &:hover {
+    background: ${colors.primary[700]};
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
 `
 
 // ── Toast ─────────────────────────────────────────────────────────────
@@ -451,33 +522,75 @@ const ToastContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${spacing[0.5]};
+  pointer-events: none;
 `
 
-const Toast = styled.div<{ type: 'success' | 'error' }>`
+const Toast = styled.div<{ $type: 'success' | 'error'; $mode: ThemeMode }>`
   display: flex;
   align-items: center;
   gap: ${spacing[0.5]};
   padding: ${spacing[0.75]} ${spacing[1]};
-  background: ${(p) => (p.type === 'success' ? colors.success[50] : colors.error[50])};
-  border: 1px solid ${(p) => (p.type === 'success' ? colors.success[100] : colors.error[100])};
-  border-left: 4px solid ${(p) => (p.type === 'success' ? colors.success[400] : colors.error[400])};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surface : colors.white)};
+  border: 1px solid ${(p) =>
+    p.$type === 'success'
+      ? (p.$mode === 'dark' ? colors.success[700] : colors.success[200])
+      : (p.$mode === 'dark' ? colors.error[700] : colors.error[200])};
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+  border-left: 4px solid ${(p) => (p.$type === 'success' ? colors.success[500] : colors.error[500])};
   border-radius: ${radii.md};
-  box-shadow: ${shadows.lg};
+  box-shadow: ${(p) => (p.$mode === 'dark' ? shadows.dark.lg : shadows.lg)};
   animation: ${slideInRight} 0.25s ease;
   font-size: ${typography.sizes.sm};
-  color: ${(p) => (p.type === 'success' ? colors.success[600] : colors.error[600])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[700])};
   min-width: 200px;
   max-width: 360px;
+  pointer-events: auto;
+`
+
+const ToastDot = styled.span<{ $type: 'success' | 'error' }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${(p) => (p.$type === 'success' ? colors.success[500] : colors.error[500])};
+  flex-shrink: 0;
+`
+
+// ── Skeleton Grid ─────────────────────────────────────────────────────
+
+const SkeletonGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr;
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (min-width: ${breakpoints.lg}) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  gap: ${spacing[1]};
+`
+
+const SkeletonStatsRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: ${spacing[0.75]};
+
+  @media (min-width: ${breakpoints.md}) {
+    gap: ${spacing[1]};
+  }
 `
 
 // ── Footer ────────────────────────────────────────────────────────────
 
-const Footer = styled.footer<{ mode: ThemeMode }>`
+const Footer = styled.footer<{ $mode: ThemeMode }>`
   text-align: center;
   padding: ${spacing[1.5]} ${spacing[1.5]};
   font-size: ${typography.sizes.xs};
-  color: ${(p) => (p.mode === 'dark' ? '#475569' : colors.gray[400])};
-  border-top: 1px solid ${(p) => (p.mode === 'dark' ? '#1e293b' : colors.gray[100])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+  border-top: 1px solid ${(p) => (p.$mode === 'dark' ? colors.dark.border : colors.gray[100])};
 `
 
 // ── Utility ───────────────────────────────────────────────────────────
@@ -509,15 +622,18 @@ export default function App() {
   const [sortBy, setSortBy] = useState<'name' | 'target' | 'progress' | 'date'>('date')
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [detailGoalId, setDetailGoalId] = useState<string | null>(null)
   const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([])
+  const [initialLoading, setInitialLoading] = useState(true)
 
   useEffect(() => {
-    dispatch(fetchGoals())
+    dispatch(fetchGoals()).finally(() => {
+      setTimeout(() => setInitialLoading(false), 300) // brief delay for smooth skeleton -> content
+    })
   }, [dispatch])
 
   // ── Filtered + sorted goals ─────────────────────────────────────────
   const filteredGoalIds = useMemo(() => {
-    // Filter by search
     let ids: string[]
     if (!searchQuery.trim()) {
       ids = [...goalIds]
@@ -530,7 +646,6 @@ export default function App() {
       })
     }
 
-    // Sort
     ids.sort((a, b) => {
       const ga = goalsMap[a]
       const gb = goalsMap[b]
@@ -585,21 +700,41 @@ export default function App() {
     dispatch(fetchGoals())
   }, [dispatch])
 
+  // ── Card click → detail or edit ────────────────────────────────────
+  const handleCardClick = useCallback((id: string) => {
+    setDetailGoalId(id)
+  }, [])
+
+  const handleDetailEdit = useCallback((id: string) => {
+    setDetailGoalId(null)
+    // Small delay to let drawer close before modal opens
+    setTimeout(() => setEditingGoalId(id), 200)
+  }, [])
+
+  const handleDetailDelete = useCallback((id: string) => {
+    setDetailGoalId(null)
+    // Open edit modal directly so user can confirm deletion
+    setTimeout(() => setEditingGoalId(id), 200)
+  }, [])
+
+  const showDashboard = !initialLoading && !error && goalIds.length > 0
+
   // ── Render ──────────────────────────────────────────────────────────
 
   return (
-    <AppContainer mode={themeMode}>
+    <AppContainer $mode={themeMode}>
       {/* ── Header ─────────────────────────────────────── */}
-      <Header>
+      <Header $mode={themeMode}>
         <HeaderInner>
           <HeaderLeft>
             <TitleGroup>
-              <h1>🎯 Goal Tracker</h1>
-              <p>Track your financial goals and stay motivated</p>
+              <h1>Financial Goals</h1>
+              <p>Track and achieve your financial milestones</p>
             </TitleGroup>
           </HeaderLeft>
           <HeaderRight>
             <IconButton
+              $mode={themeMode}
               onClick={() => dispatch(toggleMode())}
               aria-label={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
@@ -610,22 +745,106 @@ export default function App() {
         </HeaderInner>
       </Header>
 
-      {/* ── Search & Toolbar ───────────────────────────── */}
-      {!loading && !error && goalIds.length > 0 && (
-        <Toolbar>
-          <SearchIconWrapper>
-            <FontAwesomeIcon icon={faSearch} />
-            <SearchInput
+      {/* ── Dashboard Section ──────────────────────────── */}
+      {initialLoading && !error && (
+        <DashboardSection>
+          <SkeletonStatsRow>
+            <StatSkeleton mode={themeMode} />
+            <StatSkeleton mode={themeMode} />
+            <StatSkeleton mode={themeMode} />
+            <StatSkeleton mode={themeMode} />
+          </SkeletonStatsRow>
+        </DashboardSection>
+      )}
+
+      {!initialLoading && !error && goalIds.length > 0 && (
+        <DashboardSection>
+          <DashboardGrid>
+            <DashboardChart
+              totalSaved={stats.totalSaved}
+              totalTarget={stats.totalTarget}
+              goalCount={stats.count}
+              completedCount={stats.completedGoals}
               mode={themeMode}
+            />
+            <StatsGrid>
+              <StatCard $mode={themeMode}>
+                <StatHeader>
+                  <StatIcon $color={colors.primary[500]}>
+                    <FontAwesomeIcon icon={faBullseye} />
+                  </StatIcon>
+                  <StatLabelText $mode={themeMode}>Total Goals</StatLabelText>
+                </StatHeader>
+                <StatValue $mode={themeMode}>
+                  {stats.count}
+                  <StatSub $mode={themeMode}> goals</StatSub>
+                </StatValue>
+              </StatCard>
+
+              <StatCard $mode={themeMode}>
+                <StatHeader>
+                  <StatIcon $color={colors.success[500]}>
+                    <FontAwesomeIcon icon={faWallet} />
+                  </StatIcon>
+                  <StatLabelText $mode={themeMode}>Total Saved</StatLabelText>
+                </StatHeader>
+                <StatValue $mode={themeMode}>
+                  {formatCurrency(stats.totalSaved)}
+                </StatValue>
+              </StatCard>
+
+              <StatCard $mode={themeMode}>
+                <StatHeader>
+                  <StatIcon $color={colors.warning[500]}>
+                    <FontAwesomeIcon icon={faChartLine} />
+                  </StatIcon>
+                  <StatLabelText $mode={themeMode}>Total Target</StatLabelText>
+                </StatHeader>
+                <StatValue $mode={themeMode}>
+                  {formatCurrency(stats.totalTarget)}
+                </StatValue>
+              </StatCard>
+
+              <StatCard $mode={themeMode}>
+                <StatHeader>
+                  <StatIcon $color={colors.primary[400]}>
+                    <FontAwesomeIcon icon={faFlagCheckered} />
+                  </StatIcon>
+                  <StatLabelText $mode={themeMode}>Avg Progress</StatLabelText>
+                </StatHeader>
+                <StatValue $mode={themeMode}>
+                  {formatPercent(stats.avgProgress)}
+                  <StatSub $mode={themeMode}> · {stats.completedGoals} done</StatSub>
+                </StatValue>
+              </StatCard>
+            </StatsGrid>
+          </DashboardGrid>
+        </DashboardSection>
+      )}
+
+      {/* ── Search & Toolbar ───────────────────────────── */}
+      {showDashboard && (
+        <Toolbar>
+          <SearchWrapper>
+            <SearchIcon $mode={themeMode}>
+              <FontAwesomeIcon icon={faSearch} />
+            </SearchIcon>
+            <SearchInput
+              $mode={themeMode}
               type="text"
               placeholder="Search goals…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search goals"
             />
-          </SearchIconWrapper>
+            {searchQuery && (
+              <ClearSearchButton $mode={themeMode} onClick={() => setSearchQuery('')} aria-label="Clear search">
+                <FontAwesomeIcon icon={faXmark} />
+              </ClearSearchButton>
+            )}
+          </SearchWrapper>
           <SortSelect
-            mode={themeMode}
+            $mode={themeMode}
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
             aria-label="Sort goals"
@@ -635,9 +854,16 @@ export default function App() {
             <option value="target">Highest Target</option>
             <option value="progress">Most Progress</option>
           </SortSelect>
-          <ResultCount mode={themeMode}>
-            {filteredGoalIds.length} / {goalIds.length} goals
-          </ResultCount>
+          {!searchQuery && (
+            <ResultCount $mode={themeMode}>
+              {goalIds.length} {goalIds.length === 1 ? 'goal' : 'goals'}
+            </ResultCount>
+          )}
+          {searchQuery && (
+            <ResultCount $mode={themeMode}>
+              {filteredGoalIds.length} of {goalIds.length}
+            </ResultCount>
+          )}
           <CreateGoalButton
             onClick={() => setShowCreateModal(true)}
             aria-label="Create new goal"
@@ -648,77 +874,23 @@ export default function App() {
         </Toolbar>
       )}
 
-      {/* ── Dashboard Stats ────────────────────────────── */}
-      {!loading && !error && goalIds.length > 0 && (
-        <Dashboard>
-          <StatsGrid>
-            <StatCard mode={themeMode}>
-              <StatHeader>
-                <StatIcon color={colors.primary[500]}>
-                  <FontAwesomeIcon icon={faBullseye} />
-                </StatIcon>
-                <StatLabel mode={themeMode}>Total Goals</StatLabel>
-              </StatHeader>
-              <StatValue mode={themeMode}>
-                {stats.count}
-                <StatSub mode={themeMode}> goals</StatSub>
-              </StatValue>
-            </StatCard>
-
-            <StatCard mode={themeMode}>
-              <StatHeader>
-                <StatIcon color={colors.success[500]}>
-                  <FontAwesomeIcon icon={faWallet} />
-                </StatIcon>
-                <StatLabel mode={themeMode}>Total Saved</StatLabel>
-              </StatHeader>
-              <StatValue mode={themeMode}>
-                {formatCurrency(stats.totalSaved)}
-              </StatValue>
-            </StatCard>
-
-            <StatCard mode={themeMode}>
-              <StatHeader>
-                <StatIcon color={colors.warning[500]}>
-                  <FontAwesomeIcon icon={faChartLine} />
-                </StatIcon>
-                <StatLabel mode={themeMode}>Total Target</StatLabel>
-              </StatHeader>
-              <StatValue mode={themeMode}>
-                {formatCurrency(stats.totalTarget)}
-              </StatValue>
-            </StatCard>
-
-            <StatCard mode={themeMode}>
-              <StatHeader>
-                <StatIcon color={colors.primary[400]}>
-                  <FontAwesomeIcon icon={faFlagCheckered} />
-                </StatIcon>
-                <StatLabel mode={themeMode}>Avg Progress</StatLabel>
-              </StatHeader>
-              <StatValue mode={themeMode}>
-                {formatPercent(stats.avgProgress)}
-                <StatSub mode={themeMode}> · {stats.completedGoals} done</StatSub>
-              </StatValue>
-            </StatCard>
-          </StatsGrid>
-        </Dashboard>
+      {/* ── Loading State ──────────────────────────────── */}
+      {initialLoading && (
+        <Main>
+          <SkeletonGrid>
+            {Array.from({ length: Math.min(goalIds.length || 3, 6) }).map((_, i) => (
+              <GoalCardSkeleton key={i} mode={themeMode} />
+            ))}
+          </SkeletonGrid>
+        </Main>
       )}
 
       {/* ── Main Content Area ──────────────────────────── */}
       <Main>
-        {/* Loading State */}
-        {loading && (
-          <StateMessage mode={themeMode}>
-            <LoadingSpinner />
-            <LoadingText>Loading goals…</LoadingText>
-          </StateMessage>
-        )}
-
         {/* Error State */}
         {!loading && error && (
-          <StateMessage mode={themeMode}>
-            <ErrorBox mode={themeMode}>
+          <StateMessage $mode={themeMode}>
+            <ErrorBox $mode={themeMode}>
               <div>⚠️ Failed to load goals: {error}</div>
               <RetryButton onClick={handleRetry}>
                 <FontAwesomeIcon icon={faRedo} /> Retry
@@ -728,29 +900,27 @@ export default function App() {
         )}
 
         {/* Empty State — no goals at all */}
-        {!loading && !error && goalIds.length === 0 && (
-          <StateMessage mode={themeMode}>
+        {!initialLoading && !error && goalIds.length === 0 && (
+          <StateMessage $mode={themeMode}>
             <EmptyEmoji>🎯</EmptyEmoji>
             <EmptyTitle>No goals yet</EmptyTitle>
             <EmptyText>
-              Start your financial journey by creating your first goal.
-              Set a target amount, pick a due date, and track your progress!
+              Start building toward something. Create your first financial goal and track your progress here.
             </EmptyText>
-            <RetryButton
-              onClick={() => setShowCreateModal(true)}
-              style={{ background: colors.primary[500], marginTop: '1rem' }}
-            >
+            <PrimaryActionButton onClick={() => setShowCreateModal(true)}>
               <FontAwesomeIcon icon={faPlus} /> Create Your First Goal
-            </RetryButton>
+            </PrimaryActionButton>
           </StateMessage>
         )}
 
         {/* No search results */}
         {!loading && !error && goalIds.length > 0 && filteredGoalIds.length === 0 && (
-          <StateMessage mode={themeMode}>
+          <StateMessage $mode={themeMode}>
             <NoResultsEmoji>🔍</NoResultsEmoji>
-            <NoResultsText>No matching goals</NoResultsText>
-            <NoResultsSub>Try a different search term</NoResultsSub>
+            <NoResultsText>No goals match your search</NoResultsText>
+            <ClearFilterBtn $mode={themeMode} onClick={() => setSearchQuery('')}>
+              <FontAwesomeIcon icon={faXmark} /> Clear search
+            </ClearFilterBtn>
           </StateMessage>
         )}
 
@@ -758,24 +928,38 @@ export default function App() {
         {!loading && !error && filteredGoalIds.length > 0 && (
           <Grid>
             {filteredGoalIds.map((id) => (
-              <GoalCard key={id} id={id} onEdit={setEditingGoalId} />
+              <GoalCard key={id} id={id} onViewDetail={handleCardClick} />
             ))}
           </Grid>
         )}
       </Main>
 
       {/* ── Footer ─────────────────────────────────────── */}
-      {!loading && (
-        <Footer mode={themeMode}>
-          CommBank Goal Tracker · Built with React, Redux, Express & SQLite
+      {!initialLoading && (
+        <Footer $mode={themeMode}>
+          CommBank Goal Tracker · Built with React, Redux, Express &amp; SQLite
         </Footer>
+      )}
+
+      {/* ── Detail Drawer ──────────────────────────────── */}
+      {detailGoalId && (
+        <GoalDetail
+          goalId={detailGoalId}
+          onClose={() => setDetailGoalId(null)}
+          onEdit={handleDetailEdit}
+          onDelete={handleDetailDelete}
+        />
       )}
 
       {/* ── Edit Modal ─────────────────────────────────── */}
       {editingGoalId && (
         <GoalManager
           goalId={editingGoalId}
-          onClose={() => setEditingGoalId(null)}
+          onClose={() => {
+            setEditingGoalId(null)
+            // Re-fetch to get latest data
+            dispatch(fetchGoals())
+          }}
           onToast={showToast}
         />
       )}
@@ -784,7 +968,10 @@ export default function App() {
       {showCreateModal && (
         <GoalManager
           goalId={null}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setShowCreateModal(false)
+            dispatch(fetchGoals())
+          }}
           onToast={showToast}
         />
       )}
@@ -793,8 +980,8 @@ export default function App() {
       {toasts.length > 0 && (
         <ToastContainer>
           {toasts.map((t) => (
-            <Toast key={t.id} type={t.type}>
-              {t.type === 'success' ? '✓' : '✕'} {t.message}
+            <Toast key={t.id} $type={t.type} $mode={themeMode}>
+              <ToastDot $type={t.type} /> {t.message}
             </Toast>
           ))}
         </ToastContainer>

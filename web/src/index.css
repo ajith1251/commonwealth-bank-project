@@ -18,8 +18,9 @@ body {
     sans-serif;
   font-size: 16px;
   line-height: 1.5;
-  color: #1a202c;
-  background: #f7fafc;
+  color: #1e293b;
+  background: #f8fafc;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 #root {
@@ -35,7 +36,7 @@ body {
 
 /* Focus-visible for keyboard users */
 :focus-visible {
-  outline: 2px solid #4299e1;
+  outline: 2px solid #3b82f6;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -55,16 +56,36 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
+  background: #cbd5e1;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: #94a3b8;
 }
 
 /* Selection */
 ::selection {
-  background: #4299e1;
+  background: #3b82f6;
   color: white;
 }
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Emoji mart dark mode overrides — applied via React inline style not class */
+/* The emoji-mart Picker component accepts a theme prop directly, so these */
+/* overrides are for any remaining unstyled elements that need them. */
+.emoji-mart {
+  border-radius: 8px;
+}
+
+/* Input date picker icon color in dark mode applied via React style */
