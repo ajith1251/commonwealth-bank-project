@@ -17,7 +17,7 @@ import {
 } from '../store/goalSlice'
 import { updateGoal as updateGoalApi } from '../api/lib'
 import { config } from '../config'
-import { Goal } from '../types'
+import type { Goal } from '../types'
 import { colors, spacing, typography, shadows, radii, transitions, zIndex } from '../theme'
 import GoalIcon from './GoalIcon'
 

@@ -10,15 +10,28 @@ A full-stack financial goal tracking application that lets users create, manage,
 
 ## ✨ Key Features
 
-- **Goal Management** — Create, edit, and delete financial goals with name, target amount, and target date
+### 📊 Premium Dashboard
+- **Summary Metrics** — At-a-glance stats: total goals, total saved, total target, average progress
+- **SVG Ring Chart** — Overall progress visualization with saved vs. target amounts
+- **Milestone Labels** — Progress states: Getting Started → Building Momentum → Halfway There → Almost There → Goal Achieved
+- **Goal Cards** — Redesigned cards with icon, progress bar, remaining amount, urgency badge, and milestone label
+- **Goal Detail Drawer** — Slide-in detail view with full goal info, progress, dates, and actions
+
+### 💪 Goal Management
+- **Create, Edit, Delete** — Full CRUD with real Express + SQLite backend
 - **Emoji Icons** — Pick custom emoji icons for each goal using a lazy-loaded emoji picker
-- **Smart Progress Tracking** — Visual progress bars with color-coded completion levels (red → amber → blue → green)
-- **Urgency Indicators** — Color-coded badges: "Overdue!", "Due tomorrow", "3mo left", ">1y left"
-- **Search & Sort** — Real-time search by name, sort by: newest, name, highest target, most progress
-- **Summary Dashboard** — At-a-glance stats: total goals, total saved, total target, average progress
-- **Dark Mode** — Toggle between light and dark themes
-- **Responsive Design** — Works on desktop and mobile with adaptive grid layout
-- **Toast Notifications** — Success/error feedback for all actions
+- **Smart Progress Tracking** — Color-coded progress bars (red → amber → blue → green) with remaining amount
+- **Urgency Indicators** — Color-coded badges: overdue, due today, days left, weeks/months left, or "Achieved" at 100%
+- **Skeleton Loading** — Shimmer skeletons for stats and cards while data loads
+- **Empty States** — Thoughtful empty states for no goals and no search results
+
+### 🎨 User Experience
+- **Search & Sort** — Real-time search by name, sort by newest, name, highest target, or most progress
+- **Dark Mode** — Intentionally designed dark theme with proper surface hierarchy, not inverted colors
+- **Responsive Design** — Desktop (3 columns) → Tablet (2 columns) → Mobile (single column)
+- **Toast Notifications** — Polished success/error feedback for all actions
+- **Keyboard Navigation** — Full keyboard support with visible focus indicators
+- **Accessible** — aria-labels, semantic elements, `prefers-reduced-motion` support
 
 ## 🛠 Technology Stack
 

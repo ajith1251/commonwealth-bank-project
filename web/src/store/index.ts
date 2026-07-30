@@ -11,3 +11,7 @@ export const store = configureStore({
 
 export type RootState = ReturnType<typeof store.getState>
 export type AppDispatch = typeof store.dispatch
+
+// Re-export theme selectors for convenience
+export { selectMode, toggleMode, setMode } from './themeSlice'
+export type { ThemeMode } from './themeSlice'
