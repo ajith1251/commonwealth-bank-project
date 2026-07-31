@@ -9,18 +9,21 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/seed.ts",
+    "demo:reset": "tsx src/demo-reset.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "pdfkit": "^0.15.2",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/pdfkit": "^0.13.9",
     "@types/supertest": "^7.2.1",
     "@types/uuid": "^10.0.0",
     "supertest": "^7.2.2",

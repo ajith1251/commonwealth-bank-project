@@ -9,17 +9,19 @@ import Database from 'better-sqlite3'
 import fs from 'fs'
 import path from 'path'
 
-const TEST_DB_PATH = path.resolve(__dirname, '../../data/test-commbank.db')
+const TEST_DB_PATH = path.resolve(__dirname, '../../data/test-commbank-goals.db')
 
 let app: express.Express
 let db: Database.Database
 
 beforeAll(() => {
-  // Remove any existing test DB
+  // Remove any existing test DB + WAL sidecars (stale WALs can cause flakes)
   try { fs.unlinkSync(TEST_DB_PATH) } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH + '-wal') } catch { /* ok */ }
+  try { fs.unlinkSync(TEST_DB_PATH + '-shm') } catch { /* ok */ }
 
-  // Create a fresh app with the test database
-  db = initialiseDatabase()
+  // Create a fresh app with an ISOLATED test database (never touches the demo DB)
+  db = initialiseDatabase(TEST_DB_PATH)
 
   app = express()
   app.use(cors())

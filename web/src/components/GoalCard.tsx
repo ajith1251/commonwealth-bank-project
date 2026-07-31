@@ -1,8 +1,10 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
 import styled from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChevronRight, faCircleCheck } from '@fortawesome/free-solid-svg-icons'
-import { useAppSelector } from '../store/hooks'
-import { selectGoalsMap } from '../store/goalSlice'
+import { faChevronRight, faCircleCheck, faPlus, faCheck, faXmark } from '@fortawesome/free-solid-svg-icons'
+import { useAppSelector, useAppDispatch } from '../store/hooks'
+import { selectGoalsMap, updateGoalRedux } from '../store/goalSlice'
+import { updateGoal as updateGoalApi } from '../api/lib'
 import { selectMode } from '../store/themeSlice'
 import {
   colors,
@@ -15,11 +17,14 @@ import {
   getProgressColor,
   getProgressGradient,
 } from '../theme'
+import { formatCurrency } from '../format'
 import type { ThemeMode } from '../store/themeSlice'
+import type { Goal } from '../types'
 
 type Props = {
   id: string
   onViewDetail: (goalId: string) => void
+  onToast: (message: string, type: 'success' | 'error') => void
 }
 
 // ── Urgency Helpers ───────────────────────────────────────────────────
@@ -64,7 +69,7 @@ const Card = styled.div<{ $mode: ThemeMode }>`
   cursor: pointer;
   transition: box-shadow ${transitions.normal}, transform ${transitions.fast}, border-color ${transitions.normal};
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: ${spacing[0.75]};
@@ -153,9 +158,16 @@ const ChevronIcon = styled.div<{ $mode: ThemeMode }>`
 
 const AmountRow = styled.div`
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: ${spacing[0.5]};
+`
+
+const AmountLeft = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: ${spacing[0.25]};
+  min-width: 0;
 `
 
 const CurrentAmount = styled.span<{ $mode: ThemeMode }>`
@@ -167,6 +179,83 @@ const CurrentAmount = styled.span<{ $mode: ThemeMode }>`
 const TargetAmount = styled.span<{ $mode: ThemeMode }>`
   font-size: ${typography.sizes.xs};
   color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+`
+
+const AddBalanceBtn = styled.button<{ $mode: ThemeMode }>`
+  width: 28px;
+  height: 28px;
+  border-radius: ${radii.md};
+  border: 1px dashed ${(p) => (p.$mode === 'dark' ? colors.dark.borderLight : colors.gray[300])};
+  background: ${(p) => (p.$mode === 'dark' ? 'transparent' : colors.gray[50])};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.65rem;
+  transition: all ${transitions.fast};
+  flex-shrink: 0;
+
+  &:hover {
+    border-style: solid;
+    border-color: ${colors.primary[400]};
+    background: ${(p) => (p.$mode === 'dark' ? colors.primary[900] + '60' : colors.primary[50])};
+    color: ${colors.primary[600]};
+  }
+`
+
+// ── Inline Balance Input ──────────────────────────────────────────────
+
+const InputRow = styled.div<{ $mode: ThemeMode }>`
+  display: flex;
+  align-items: center;
+  gap: ${spacing[0.5]};
+  padding: ${spacing[0.5]} ${spacing[0.75]};
+  background: ${(p) => (p.$mode === 'dark' ? colors.dark.surfaceAlt : colors.primary[50])};
+  border: 1px solid ${colors.primary[200]};
+  border-radius: ${radii.md};
+  position: relative;
+  z-index: 5;
+`
+
+const BalanceInput = styled.input<{ $mode: ThemeMode }>`
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: ${typography.sizes.sm};
+  font-weight: ${typography.weights.semibold};
+  color: ${(p) => (p.$mode === 'dark' ? colors.dark.text : colors.gray[800])};
+  outline: none;
+  min-width: 0;
+  width: 60px;
+
+  &::placeholder {
+    color: ${(p) => (p.$mode === 'dark' ? colors.dark.textMuted : colors.gray[400])};
+  }
+`
+
+const InputAction = styled.button<{ $color?: string }>`
+  width: 26px;
+  height: 26px;
+  border-radius: ${radii.sm};
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.65rem;
+  background: ${(p) => p.$color ?? colors.primary[600]};
+  color: ${colors.white};
+  transition: opacity ${transitions.fast};
+
+  &:hover {
+    opacity: 0.85;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 `
 
 // ── Progress Bar ──────────────────────────────────────────────────────
@@ -222,22 +311,67 @@ const CompletedIcon = styled.span`
   align-items: center;
 `
 
-// ── Formatting Helpers ────────────────────────────────────────────────
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
 // ── Component ─────────────────────────────────────────────────────────
 
-export default function GoalCard(props: Props) {
-  const goal = useAppSelector(selectGoalsMap)[props.id]
+export default function GoalCard({ id, onViewDetail, onToast }: Props) {
+  const dispatch = useAppDispatch()
+  const goal = useAppSelector(selectGoalsMap)[id]
   const themeMode = useAppSelector(selectMode)
+
+  const [showInput, setShowInput] = useState(false)
+  const [addAmount, setAddAmount] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (showInput) inputRef.current?.focus()
+  }, [showInput])
+
+  const handleAddClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowInput(true)
+  }, [])
+
+  const handleCancel = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowInput(false)
+    setAddAmount('')
+  }, [])
+
+  const handleConfirm = useCallback(async (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    if (!goal || saving) return
+
+    const amount = parseFloat(addAmount)
+    if (isNaN(amount) || amount <= 0) return
+
+    setSaving(true)
+    const newBalance = goal.balance + amount
+    const updatedGoal: Goal = { ...goal, balance: newBalance }
+
+    dispatch(updateGoalRedux(updatedGoal))
+    const result = await updateGoalApi(goal.id, updatedGoal)
+    setSaving(false)
+    setShowInput(false)
+    setAddAmount('')
+
+    if (result.error) {
+      onToast(result.error.message || 'Failed to update balance', 'error')
+    } else {
+      onToast(`Added ${formatCurrency(amount)} to ${goal.name}`, 'success')
+    }
+  }, [goal, addAmount, saving, dispatch, onToast])
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleConfirm(e as unknown as React.MouseEvent)
+    }
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      setShowInput(false)
+      setAddAmount('')
+    }
+  }, [handleConfirm])
 
   if (!goal) return null
 
@@ -247,15 +381,16 @@ export default function GoalCard(props: Props) {
   const progressColor = getProgressColor(progress)
   const progressGradient = getProgressGradient(progress)
   const milestone = getMilestone(progress)
+  const remaining = Math.max(goal.targetAmount - goal.balance, 0)
 
   return (
     <Card
       $mode={themeMode}
-      onClick={() => props.onViewDetail(goal.id)}
+      onClick={() => onViewDetail(goal.id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          props.onViewDetail(goal.id)
+          onViewDetail(goal.id)
         }
       }}
       role="button"
@@ -285,10 +420,60 @@ export default function GoalCard(props: Props) {
         </ChevronIcon>
       </TopRow>
 
-      <AmountRow>
-        <CurrentAmount $mode={themeMode}>{formatCurrency(goal.balance)}</CurrentAmount>
-        <TargetAmount $mode={themeMode}>of {formatCurrency(goal.targetAmount)}</TargetAmount>
-      </AmountRow>
+      {showInput ? (
+        <InputRow $mode={themeMode} onClick={(e) => e.stopPropagation()}>
+          <span style={{ fontSize: '0.75rem', color: colors.gray[400], fontWeight: 600 }}>$</span>
+          <BalanceInput
+            $mode={themeMode}
+            ref={inputRef}
+            type="number"
+            min={1}
+            step={1}
+            placeholder="Amount"
+            value={addAmount}
+            onChange={(e) => setAddAmount(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            aria-label="Amount to add"
+          />
+          {remaining > 0 && (
+            <span style={{ fontSize: '0.6rem', color: colors.gray[400], whiteSpace: 'nowrap' }}>
+              max {formatCurrency(remaining)}
+            </span>
+          )}
+          <InputAction
+            $color={colors.success[500]}
+            onClick={handleConfirm}
+            disabled={!addAmount || saving}
+            aria-label="Confirm add"
+          >
+            <FontAwesomeIcon icon={faCheck} />
+          </InputAction>
+          <InputAction
+            $color={colors.gray[400]}
+            onClick={handleCancel}
+            aria-label="Cancel"
+          >
+            <FontAwesomeIcon icon={faXmark} />
+          </InputAction>
+        </InputRow>
+      ) : (
+        <AmountRow>
+          <AmountLeft>
+            <CurrentAmount $mode={themeMode}>{formatCurrency(goal.balance)}</CurrentAmount>
+            <TargetAmount $mode={themeMode}>of {formatCurrency(goal.targetAmount)}</TargetAmount>
+          </AmountLeft>
+          {!isComplete && (
+            <AddBalanceBtn
+              $mode={themeMode}
+              onClick={handleAddClick}
+              aria-label="Add to balance"
+              title="Quick-add to balance"
+            >
+              <FontAwesomeIcon icon={faPlus} />
+            </AddBalanceBtn>
+          )}
+        </AmountRow>
+      )}
 
       <ProgressBarOuter $mode={themeMode}>
         <ProgressBarInner $progress={progress} $gradient={progressGradient} />

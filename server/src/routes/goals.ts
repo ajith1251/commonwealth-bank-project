@@ -3,6 +3,8 @@ import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
 import { Goal } from '../types'
 import { SQL } from '../sql'
+import { AnalyticsRepository } from '../analytics/analytics.repository'
+import { recordCheckin } from '../engagement/checkin'
 import {
   validate,
   requiredName,
@@ -45,7 +47,6 @@ function serialiseArray(arr: string[] | null): string | null {
 
 /**
  * Executes a prepared statement with the given parameters.
- * This wrapper avoids conditional type inference issues with better-sqlite3's generic prepare().run().
  */
 function runStatement(db: Database.Database, sql: string, params: BindParams): void {
   db.prepare(sql).run(params)
@@ -53,9 +54,9 @@ function runStatement(db: Database.Database, sql: string, params: BindParams): v
 
 export function createGoalsRouter(db: Database.Database): Router {
   const router = Router()
+  const analyticsRepo = new AnalyticsRepository(db)
 
   // ── GET /api/Goal ─────────────────────────────────────────────────
-  // Returns all goals (mirrors GoalsService.GetAsync())
   router.get('/', (_req: Request, res: Response) => {
     const rows = db.prepare(SQL.SELECT_ALL_GOALS).all() as Record<string, unknown>[]
     const goals = rows.map(rowToGoal)
@@ -63,7 +64,6 @@ export function createGoalsRouter(db: Database.Database): Router {
   })
 
   // ── GET /api/Goal/ForUser/:userId ─────────────────────────────────
-  // Returns goals filtered by user ID (from test spec: GetForUser route)
   router.get('/ForUser/:userId', (req: Request, res: Response) => {
     const { userId } = req.params
     const rows = db
@@ -74,7 +74,6 @@ export function createGoalsRouter(db: Database.Database): Router {
   })
 
   // ── GET /api/Goal/:id ─────────────────────────────────────────────
-  // Returns a single goal by ID, or 404 if not found
   router.get('/:id', (req: Request, res: Response) => {
     const { id } = req.params
     const row = db.prepare(SQL.SELECT_GOAL_BY_ID).get(id) as Record<string, unknown> | undefined
@@ -88,7 +87,6 @@ export function createGoalsRouter(db: Database.Database): Router {
   })
 
   // ── POST /api/Goal ────────────────────────────────────────────────
-  // Creates a new goal, returns 201 with the created resource
   router.post(
     '/',
     validate(requiredName, positiveTargetAmount, validTargetDate, requiredUserId),
@@ -125,12 +123,19 @@ export function createGoalsRouter(db: Database.Database): Router {
       userId: goal.userId,
     })
 
+    // Track progress snapshot + activity
+    analyticsRepo.recordProgressSnapshot(String(goal.id), Number(goal.balance))
+    analyticsRepo.recordActivity(goal.id, 'GOAL_CREATED', {
+      name: String(goal.name),
+      targetAmount: Number(goal.targetAmount),
+      icon: goal.icon as string | null,
+    })
+    recordCheckin(db, 'CREATE_GOAL')
+
     res.status(201).json(goal)
   })
 
   // ── PUT /api/Goal/:id ─────────────────────────────────────────────
-  // Replaces an existing goal entirely. Returns 204 on success, 404 if not found.
-  // Preserves the original ID (mirrors UpdateAsync behaviour).
   router.put(
     '/:id',
     validate(optionalName, positiveTargetAmount, validTargetDate, optionalIcon),
@@ -145,7 +150,6 @@ export function createGoalsRouter(db: Database.Database): Router {
 
     const body: Record<string, unknown> = req.body ?? {}
 
-    // Preserve the original ID (mirrors `updatedGoal.Id = goal.Id` in the C# controller)
     const goal = {
       id,
       name: (body.name as string | undefined) ?? (existing.name as string),
@@ -182,20 +186,63 @@ export function createGoalsRouter(db: Database.Database): Router {
       userId: goal.userId,
     })
 
-    // Return 204 No Content (matches the C# controller)
+    // Track progress snapshot + activity
+    const oldBalance = Number(existing.balance)
+    const newBalance = Number(goal.balance)
+    if (newBalance !== oldBalance) {
+      analyticsRepo.recordProgressSnapshot(String(id), newBalance)
+      analyticsRepo.recordActivity(String(id), 'GOAL_UPDATED', {
+        name: String(goal.name),
+        oldBalance,
+        newBalance,
+        amountAdded: newBalance - oldBalance,
+      })
+
+      // Check if goal was just completed
+      const existingTarget = Number(existing.targetAmount)
+      const goalTarget = Number(goal.targetAmount)
+      const wasComplete = oldBalance >= existingTarget
+      const nowComplete = newBalance >= goalTarget
+      if (!wasComplete && nowComplete) {
+        analyticsRepo.recordActivity(String(id), 'GOAL_COMPLETED', {
+          name: String(goal.name),
+          balance: newBalance,
+          targetAmount: goalTarget,
+        })
+      }
+
+      // Check milestone reached
+      const oldPct = oldBalance / existingTarget
+      const newPct = newBalance / goalTarget
+      const milestoneThresholds = [0.25, 0.5, 0.75]
+      for (const threshold of milestoneThresholds) {
+        if (oldPct < threshold && newPct >= threshold) {
+          analyticsRepo.recordActivity(String(id), 'MILESTONE_REACHED', {
+            name: String(goal.name),
+            milestone: `${Math.round(threshold * 100)}%`,
+          })
+        }
+      }
+    }
+    recordCheckin(db, 'UPDATE_GOAL')
+
     res.status(204).send()
   })
 
   // ── DELETE /api/Goal/:id ──────────────────────────────────────────
-  // Deletes a goal by ID. Returns 204 on success, 404 if not found.
   router.delete('/:id', (req: Request, res: Response) => {
     const { id } = req.params
-    const existing = db.prepare(SQL.SELECT_GOAL_ID).get(id)
+    const existing = db.prepare(SQL.SELECT_GOAL_ID).get(id) as Record<string, unknown> | undefined
 
     if (!existing) {
       res.status(404).json({ error: 'Goal not found' })
       return
     }
+
+    // Record activity before deleting
+    analyticsRepo.recordActivity(String(id), 'GOAL_DELETED', {
+      name: String(existing.name),
+    })
 
     db.prepare(SQL.DELETE_GOAL).run(id)
     res.status(204).send()

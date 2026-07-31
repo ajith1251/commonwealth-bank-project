@@ -44,14 +44,17 @@ function loadSeedData<T>(filename: string): T[] {
   })
 }
 
-export function initialiseDatabase(): Database.Database {
+export function initialiseDatabase(dbPath?: string): Database.Database {
+  // Allow tests to run against an isolated database file.
+  const resolvedPath = dbPath ?? DB_PATH
+
   // Ensure the data directory exists
-  const dbDir = path.dirname(DB_PATH)
+  const dbDir = path.dirname(resolvedPath)
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true })
   }
 
-  const db = new Database(DB_PATH)
+  const db = new Database(resolvedPath)
 
   // Enable WAL mode for better concurrent read performance
   db.pragma('journal_mode = WAL')
@@ -110,9 +113,80 @@ export function initialiseDatabase(): Database.Database {
       name TEXT NOT NULL UNIQUE
     );
 
+    CREATE TABLE IF NOT EXISTS goal_progress_history (
+      id TEXT PRIMARY KEY,
+      goal_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      recorded_at TEXT NOT NULL,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS activities (
+      id TEXT PRIMARY KEY,
+      goal_id TEXT,
+      type TEXT NOT NULL,
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      configuration TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS report_shares (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      revoked_at TEXT,
+      view_count INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_checkins (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      activity_date TEXT NOT NULL,
+      first_activity_at TEXT NOT NULL,
+      last_activity_at TEXT NOT NULL,
+      activity_count INTEGER NOT NULL DEFAULT 1,
+      types TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      UNIQUE (user_id, activity_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS focus_goal (
+      user_id TEXT PRIMARY KEY,
+      goal_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS achievements (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      unlocked_at TEXT NOT NULL,
+      UNIQUE (user_id, code)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_goals_userId ON goals(userId);
     CREATE INDEX IF NOT EXISTS idx_transactions_userId ON transactions(userId);
     CREATE INDEX IF NOT EXISTS idx_transactions_goalId ON transactions(goalId);
+    CREATE INDEX IF NOT EXISTS idx_progress_history_goalId ON goal_progress_history(goal_id);
+    CREATE INDEX IF NOT EXISTS idx_activities_createdAt ON activities(created_at);
+    CREATE INDEX IF NOT EXISTS idx_report_shares_token_hash ON report_shares(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_report_shares_report_id ON report_shares(report_id);
+    CREATE INDEX IF NOT EXISTS idx_checkins_user_date ON user_checkins(user_id, activity_date);
   `)
 
   // ── Seed data ───────────────────────────────────────────────────────

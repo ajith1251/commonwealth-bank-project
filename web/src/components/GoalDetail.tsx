@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import styled, { keyframes } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
@@ -12,6 +12,8 @@ import {
   faCircleExclamation,
   faFire,
   faChevronRight,
+  faShareFromSquare,
+  faBullseye,
 } from '@fortawesome/free-solid-svg-icons'
 import { useAppSelector } from '../store/hooks'
 import { selectGoalsMap } from '../store/goalSlice'
@@ -28,6 +30,8 @@ import {
   getProgressGradient,
 } from '../theme'
 import type { ThemeMode } from '../store/themeSlice'
+import { fetchFocusGoal, setFocusGoal } from '../api/engagement'
+import { formatCurrency, formatDateLong } from '../format'
 
 const overlayIn = keyframes`
   from { opacity: 0; }
@@ -298,23 +302,6 @@ const Divider = styled.div<{ $mode: ThemeMode }>`
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
-
 function getDaysUntil(targetDate: string): number {
   const now = new Date()
   const target = new Date(targetDate)
@@ -327,7 +314,7 @@ function getUrgency(targetDate: string) {
   if (days === 0) return { color: colors.warning[500], bg: colors.warning[50], border: colors.warning[100], label: 'Due today', icon: faFire }
   if (days <= 7) return { color: colors.warning[500], bg: colors.warning[50], border: colors.warning[100], label: `${days} days left`, icon: faClock }
   if (days <= 30) return { color: colors.primary[500], bg: colors.primary[50], border: colors.primary[100], label: `${days} days left`, icon: faClock }
-  return { color: colors.success[500], bg: colors.success[50], border: colors.success[100], label: formatDate(targetDate), icon: faCalendarDays }
+  return { color: colors.success[500], bg: colors.success[50], border: colors.success[100], label: formatDateLong(targetDate), icon: faCalendarDays }
 }
 
 type Props = {
@@ -335,12 +322,49 @@ type Props = {
   onClose: () => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  onToast: (message: string, type: 'success' | 'error') => void
 }
 
-export default function GoalDetail({ goalId, onClose, onEdit, onDelete }: Props) {
+export default function GoalDetail({ goalId, onClose, onEdit, onDelete, onToast }: Props) {
   const goal = useAppSelector(selectGoalsMap)[goalId]
   const themeMode = useAppSelector(selectMode)
   const drawerRef = useRef<HTMLDivElement>(null)
+  const [focusGoalId, setFocusGoalId] = useState<string | null>(null)
+  const [focusUpdating, setFocusUpdating] = useState(false)
+
+  // Lock body scroll while the drawer is open.
+  useEffect(() => {
+    const original = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = original
+    }
+  }, [])
+
+  // Load the current focus goal so the drawer can offer the action.
+  useEffect(() => {
+    let mounted = true
+    fetchFocusGoal()
+      .then((g) => mounted && setFocusGoalId(g ? g.id : null))
+      .catch(() => undefined)
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const handleSetFocus = async () => {
+    if (!goal || focusUpdating) return
+    setFocusUpdating(true)
+    try {
+      const g = await setFocusGoal(goal.id)
+      setFocusGoalId(g ? g.id : null)
+      onToast('Set as focus goal', 'success')
+    } catch {
+      onToast('Failed to update focus goal', 'error')
+    } finally {
+      setFocusUpdating(false)
+    }
+  }
 
   // Focus trap — cycle tab through focusable elements inside the drawer
   const handleKeyDown = useCallback(
@@ -470,7 +494,7 @@ export default function GoalDetail({ goalId, onClose, onEdit, onDelete }: Props)
               <DetailLabel $mode={themeMode}>Target Date</DetailLabel>
               <DetailValue $mode={themeMode}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {formatDate(goal.targetDate)}
+                  {formatDateLong(goal.targetDate)}
                   <UrgencyBadge $bg={urgency.bg} $color={urgency.color} $border={urgency.border}>
                     {urgency.label}
                   </UrgencyBadge>
@@ -485,7 +509,7 @@ export default function GoalDetail({ goalId, onClose, onEdit, onDelete }: Props)
             </DetailIcon>
             <DetailContent>
               <DetailLabel $mode={themeMode}>Created</DetailLabel>
-              <DetailValue $mode={themeMode}>{formatDate(goal.created)}</DetailValue>
+              <DetailValue $mode={themeMode}>{formatDateLong(goal.created)}</DetailValue>
             </DetailContent>
           </DetailRow>
         </DetailsGrid>
@@ -502,6 +526,93 @@ export default function GoalDetail({ goalId, onClose, onEdit, onDelete }: Props)
             <FontAwesomeIcon icon={faTrashCan} />
           </DeleteBtn>
         </ActionButtons>
+
+        {/* Focus Goal Action */}
+        <div style={{ padding: `0 ${spacing[1.5]} ${spacing[1]}`, marginTop: spacing[0.5] }}>
+          <button
+            onClick={handleSetFocus}
+            disabled={focusUpdating || focusGoalId === goal.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              width: '100%',
+              padding: '8px 12px',
+              border: `1px solid ${colors.primary[200]}`,
+              borderRadius: '8px',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              background: focusGoalId === goal.id
+                ? (themeMode === 'dark' ? 'rgba(59,130,246,0.12)' : colors.primary[50])
+                : 'transparent',
+              color: focusGoalId === goal.id ? colors.primary[600] : (themeMode === 'dark' ? '#94a3b8' : '#64748b'),
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (focusGoalId !== goal.id) {
+                e.currentTarget.style.borderColor = colors.primary[400]
+                e.currentTarget.style.color = colors.primary[600]
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (focusGoalId !== goal.id) {
+                e.currentTarget.style.borderColor = colors.primary[200]
+                e.currentTarget.style.color = themeMode === 'dark' ? '#94a3b8' : '#64748b'
+              }
+            }}
+            aria-label={focusGoalId === goal.id ? 'This is your focus goal' : 'Set as focus goal'}
+          >
+            <FontAwesomeIcon icon={faBullseye} />
+            {focusUpdating
+              ? 'Updating…'
+              : focusGoalId === goal.id
+                ? 'Focus Goal ✓'
+                : 'Set as Focus Goal'}
+          </button>
+        </div>
+
+        {/* Share Section */}
+        <div style={{ padding: `0 ${spacing[1.5]} ${spacing[1.5]}` }}>
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}${window.location.pathname}?goal=${goal.id}`
+              navigator.clipboard.writeText(url).then(
+                () => onToast('Share link copied to clipboard', 'success'),
+                () => onToast('Failed to copy link', 'error'),
+              )
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              width: '100%',
+              padding: '8px 12px',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              background: themeMode === 'dark' ? '#1e293b' : '#f8fafc',
+              color: themeMode === 'dark' ? '#94a3b8' : '#64748b',
+              transition: 'background 0.15s ease, color 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = themeMode === 'dark' ? '#334155' : '#f1f5f9'
+              e.currentTarget.style.color = themeMode === 'dark' ? '#e2e8f0' : '#3b82f6'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = themeMode === 'dark' ? '#1e293b' : '#f8fafc'
+              e.currentTarget.style.color = themeMode === 'dark' ? '#94a3b8' : '#64748b'
+            }}
+            aria-label="Share goal link"
+          >
+            <FontAwesomeIcon icon={faShareFromSquare} />
+            Copy Share Link
+          </button>
+        </div>
       </Drawer>
     </Overlay>
   )

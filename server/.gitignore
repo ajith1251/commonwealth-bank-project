@@ -4,3 +4,5 @@ data/commbank.db
 data/commbank.db-shm
 data/commbank.db-wal
 *.db
+*.db-shm
+*.db-wal
