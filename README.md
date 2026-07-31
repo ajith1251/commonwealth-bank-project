@@ -4,6 +4,8 @@
 
 A full-stack financial goal tracker that turns savings goals into a professional fintech product: goal management, executive analytics, report generation with real PDF export and secure sharing, plus consistency and engagement intelligence — all in one enterprise-style dashboard.
 
+> **Disclaimer:** Independent educational project built from a Commonwealth Bank goal-tracker development brief. Not an official Commonwealth Bank product.
+
 > **Portfolio Project** — Built on an existing onboarding codelab curriculum from CommBank. Original instructional materials authored by Tag Ramotar. Application code independently implemented with significant UI/UX, engineering, and feature improvements. This is **not** an official Commonwealth Bank product.
 
 ## 🎥 Project Demo
