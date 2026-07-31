@@ -6,6 +6,10 @@ A full-stack financial goal tracker that turns savings goals into a professional
 
 > **Portfolio Project** — Built on an existing onboarding codelab curriculum from CommBank. Original instructional materials authored by Tag Ramotar. Application code independently implemented with significant UI/UX, engineering, and feature improvements. This is **not** an official Commonwealth Bank product.
 
+## 🎥 Project Demo
+
+<video src="demos/demo-goal-tracker.mp4" controls width="100%"></video>
+
 ---
 
 ## 🖼 Demos
