@@ -8,9 +8,7 @@ A full-stack financial goal tracker that turns savings goals into a professional
 
 ## 🎥 Project Demo
 
-[![CommBank Goal Tracker — watch the project demo](demos/demo-preview.png)](demos/demo-goal-tracker.mp4)
-
-Click the thumbnail to watch the demo video.
+<video src="https://github.com/user-attachments/assets/6c7fce04-4d64-4cc4-9bc5-15ffa0c199f3" controls></video>
 
 ---
 
